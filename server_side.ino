@@ -93,10 +93,12 @@ uint16_t calculateChecksum(const uint8_t* data, size_t length) {
     return checksum;
 }
 
+uint8_t expected_id = 0;
+
  
 void loop() {
 
-    uint8_t expected_id = 0;
+
  
   if (nrf24.available()) {
         const int packetSize = 28; // Example packet size
