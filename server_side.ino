@@ -60,7 +60,6 @@ void setup() {
  
 }
 
-uint8_t previous_id = 0;
 
 // Function to calculate checksum
 uint16_t calculateChecksum(const uint8_t* data, size_t length) {
@@ -94,9 +93,10 @@ uint16_t calculateChecksum(const uint8_t* data, size_t length) {
     return checksum;
 }
 
-bool end_true = false;
  
 void loop() {
+
+    uint8_t expected_id = 0;
  
   if (nrf24.available()) {
         const int packetSize = 28; // Example packet size
@@ -111,22 +111,15 @@ void loop() {
  
         // Receive data
         if (nrf24.recv(packet, &packetLength)) {
-            if((packet[0] == 0xFF && packet[1] == 0xD9)) {
-
-
-            }
-            if (!(packet[0] == 0xFF && packet[1] == 0xD8) && currentIndex == 0 ){ 
-            USE_SERIAL.println("starting not found");}
-            else{
                 //PROCESS THE DATA
                 USE_SERIAL.print("Current packet id: ");
                 USE_SERIAL.print(packet[26]);
-                USE_SERIAL.print(" previous_id: ");
-                USE_SERIAL.print(previous_id);
+                USE_SERIAL.print(" expected_id: ");
+                USE_SERIAL.print(expected_id);
                 USE_SERIAL.println();
 
                 // good number 
-                if(previous_id == packet[26]) {
+                if(expected_id == packet[26]) {
                   USE_SERIAL.print("In Good Number");
                   USE_SERIAL.println();
                   USE_SERIAL.println();
@@ -136,7 +129,7 @@ void loop() {
                   USE_SERIAL.print(currentIndex);
                   USE_SERIAL.print(" ");
                   currentIndex += packetLength - 2;
-                  previous_id = (previous_id + 1) % 256; // Wrap around packet ID / CHANGED CODE!
+                  expected_id = (expected_id + 1) % 256; // Wrap around packet ID / CHANGED CODE!
 
                   // Check for JPEG end marker
                   for (int i = 1; i < packetLength; i++) {
@@ -144,9 +137,9 @@ void loop() {
                           USE_SERIAL.println("\nJPEG End Found");
 
                           // Send a reply with 2 as the second item indicating end
-                          uint8_t data[] = {previous_id, 2};
-                          
-                          previous_id = 0;
+                          uint8_t data[] = {expected_id, 2};
+
+                          expected_id = 0;
                           jpegComplete = true;
                           //if checksum good
 
@@ -158,6 +151,7 @@ void loop() {
                     
                   }
 
+
                 }
 
                 if(!jpegComplete) {
@@ -167,14 +161,24 @@ void loop() {
                 uint8_t num = (check_sum == packet[27]) ? 0 : 1;
                 Serial.println((num == 0) ? "CHECKSUM GOOD" : "CHECKSUM BAD");
 
-                uint8_t data[] = {previous_id, num};
+                uint8_t data[] = {expected_id, num};
 
                 nrf24.send(data, sizeof(data));
                 nrf24.waitPacketSent();
                 Serial.println("Sent a reply"); 
                 
-                } 
-            }
+                } else {
+
+                    uint8_t data[] = {expected_id, 2};
+
+                    expected_id = 0;
+                    jpegComplete = true;
+                    //if checksum good
+
+                    nrf24.send(data, sizeof(data));
+
+                }
+
         } else {
             USE_SERIAL.println("Receive failed");
         } 

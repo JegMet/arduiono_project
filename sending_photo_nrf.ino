@@ -62,12 +62,14 @@ uint16_t calculateChecksum(const uint8_t* data, size_t length) {
     return checksum;
 }
 
-uint8_t ack_id = 0;
-uint8_t ack_good_checksum;
+
+
 
 
 
 void sendFromSDCard(int jpg_number) {
+    uint8_t ack_good_checksum;
+    uint8_t ack_id = 0;
     bool next_packet = true;
     uint8_t packet_id = 0;
     uint8_t check_sum = 0;
