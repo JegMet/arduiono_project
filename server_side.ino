@@ -245,6 +245,10 @@ void loop() {
         currentIndex = 0;
         jpegComplete = false;
     }
+
+    if(currentIndex != 0){
+      currentIndex = 0;
+    }
  
     // delay(5000); // Wait 5 seconds before trying again
   }
