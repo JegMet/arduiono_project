@@ -95,10 +95,10 @@ uint16_t calculateChecksum(const uint8_t* data, size_t length) {
 
 uint8_t expected_id = 0;
 
+// 0 means no data, 1 means it processed the start, 2 means its processed the end but its unstored, 3 means end is processed and stored
+int ready_to_post = 0;
  
 void loop() {
-
-
  
   if (nrf24.available()) {
         const int packetSize = 28; // Example packet size
@@ -113,6 +113,8 @@ void loop() {
  
         // Receive data
         if (nrf24.recv(packet, &packetLength)) {
+          Serial.print("ready to post value: ");
+          Serial.println(ready_to_post);
                 //PROCESS THE DATA
                 USE_SERIAL.print("Current packet id: ");
                 USE_SERIAL.print(packet[26]);
@@ -120,8 +122,49 @@ void loop() {
                 USE_SERIAL.print(expected_id);
                 USE_SERIAL.println();
 
-                // good number 
-                if(expected_id == packet[26]) {
+                  // Check for JPEG end marker
+                  for (int i = 1; i < packetLength; i++) {
+                      if (packet[i] == 0xD9 && packet[i - 1] == 0xFF) {
+                          USE_SERIAL.println("\nJPEG End Found");
+
+                          if(ready_to_post == 1) {
+                            ready_to_post = 2;
+                          }
+
+                              Serial.print("ready to post value: ");
+                              Serial.println(ready_to_post);
+
+
+                          jpegComplete = true;
+                          //if checksum good
+
+                      }
+
+                       if (packet[i] == 0xD8 && packet[i - 1] == 0xFF) {
+                          USE_SERIAL.println("\nJPEG Start Found");
+
+                          if(ready_to_post == 0 ) { // will be equal to zero on first try
+                            ready_to_post = 1;
+                          } 
+
+                          Serial.print("ready to post value: ");
+                          Serial.println(ready_to_post);
+                          
+                          jpegComplete = false;
+                          expected_id = 0;
+                          currentIndex = 0;
+                      }
+                    
+                  }
+
+                // last packet will be equal to 1 to save last packet once
+                if(expected_id == packet[26] || (ready_to_post==2)) {
+                
+
+                  if(ready_to_post == 2) { // only allow special condition to happen once
+                    ready_to_post = 3;
+                  }
+    
                   USE_SERIAL.print("In Good Number");
                   USE_SERIAL.println();
                   USE_SERIAL.println();
@@ -133,37 +176,12 @@ void loop() {
                   currentIndex += packetLength - 2;
                   expected_id = (expected_id + 1) % 256; // Wrap around packet ID / CHANGED CODE!
 
-                  // Check for JPEG end marker
-                  for (int i = 1; i < packetLength; i++) {
-                      if (packet[i] == 0xD9 && packet[i - 1] == 0xFF) {
-                          USE_SERIAL.println("\nJPEG End Found");
-
-                          // Send a reply with 2 as the second item indicating end
-                          uint8_t data[] = {expected_id, 2};
-
-                          expected_id = 0;
-                          jpegComplete = true;
-                          //if checksum good
-
-                          nrf24.send(data, sizeof(data));
-                          nrf24.waitPacketSent();
-                          Serial.println("Sent final reply");
-                          break;
-                      }
-                    
-                  }
-
-
                 }
 
                 if(!jpegComplete) {
 
-                uint8_t check_sum = calculateChecksum(packet, packetLength-2);
 
-                uint8_t num = (check_sum == packet[27]) ? 0 : 1;
-                Serial.println((num == 0) ? "CHECKSUM GOOD" : "CHECKSUM BAD");
-
-                uint8_t data[] = {expected_id, num};
+                uint8_t data[] = {expected_id, 0};
 
                 nrf24.send(data, sizeof(data));
                 nrf24.waitPacketSent();
@@ -173,11 +191,13 @@ void loop() {
 
                     uint8_t data[] = {expected_id, 2};
 
-                    expected_id = 0;
+                    
                     jpegComplete = true;
                     //if checksum good
 
                     nrf24.send(data, sizeof(data));
+                    nrf24.waitPacketSent();
+                    Serial.println("Sent Final reply"); 
 
                 }
 
@@ -187,8 +207,12 @@ void loop() {
     }
 
 
+
     //Check WiFi connection status
-    if(WiFi.status()== WL_CONNECTED && jpegComplete){ 
+    if(WiFi.status()== WL_CONNECTED && jpegComplete && (ready_to_post == 3)){ 
+
+       ready_to_post = 0;
+      
  
        if (wifiMulti.run() == WL_CONNECTED) {
         String base64Image = base64::encode(buffer, currentIndex);
@@ -249,6 +273,8 @@ void loop() {
     if(currentIndex != 0){
       currentIndex = 0;
     }
+
+    expected_id = 0;
  
     // delay(5000); // Wait 5 seconds before trying again
   }
